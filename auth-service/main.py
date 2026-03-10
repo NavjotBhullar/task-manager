@@ -1,3 +1,5 @@
+import os
+import uvicorn
 from fastapi import FastAPI , HTTPException,Request
 from utils import create_access_token 
 from database import collection 
@@ -9,7 +11,12 @@ from fastapi import Depends
 # test branch
 app = FastAPI()
 
+PORT = int(os.getenv("PORT", 8000))
+
 security = HTTPBearer()
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="127.0.0.1", port=PORT, reload=True)
 
 @app.get("/")
 async def main():
