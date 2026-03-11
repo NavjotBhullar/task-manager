@@ -17,10 +17,10 @@ app = FastAPI(title="Notification Service", version="1.0.0", lifespan=lifespan)
 
 app.include_router(router)
 
-app.get("/")
+@app.get("/")
 async def root():
     return {"message": "Notification Service is running"}
 
 @app.get("/health")
 async def health():
-    return {"statue": "healthy","service":"notification-service", "port": 8001}
+    return {"status": "healthy","service":"notification-service", "port": 8005}

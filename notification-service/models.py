@@ -28,3 +28,7 @@ class BulkNotifyRequest(BaseModel):
     notification_type : NotificationType = NotificationType.TASK_ASSIGNED
     recipient_user_ids: list[str]
 
+class NotifyUserRequest(BaseModel):
+    subject: str
+    message: str
+    recipient_email: Optional[EmailStr] = None  # if None, fetched from users collection

@@ -4,7 +4,7 @@ from typing import Optional
 from bson import ObjectId
 
 from database import notifications_collection,tasks_collection,users_collection
-from models import NotifyTaskRequest, NotificationStatus, NotificationType, BulkNotifyRequest
+from models import NotifyTaskRequest, NotificationStatus, NotificationType, BulkNotifyRequest, NotifyUserRequest
 from utils import verify_token, build_email_content, send_email
 from notif.dependencies import get_current_user
 from notif.queue import notification_queue
@@ -135,7 +135,7 @@ async def bulk_notify(request: BulkNotifyRequest, user = Depends(get_current_use
             task = None
         task = task or {"_id": task_id, "title": f"Task {task_id}" }
 
-        subject, html_body = build_email_content(request.notification_type, task, db_user.get("name","User"))
+        subject, html_body = build_email_content(request.notification_type, task_id, db_user.get("name","User"))
 
         doc = {
             "task_id": task_id,
@@ -174,3 +174,64 @@ async def delete_notification(notification_id: str, user = Depends(get_current_u
     
     return {"message": "Notification deleted successfully"}
 
+# POST /notify/user/{user_id} — send a custom notification directly to a user
+@router.post("/user/{user_id}")
+async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_current_user)):
+
+    # 1. Resolve recipient email
+    recipient_email = body.recipient_email
+    user_name = "User"
+
+    if not recipient_email:
+        # fetch email from users collection if not provided in body
+        try:
+            db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid user ID format")
+
+        if not db_user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        recipient_email = db_user.get("email")
+        user_name = db_user.get("name", db_user.get("username", "User"))
+
+        if not recipient_email:
+            raise HTTPException(status_code=400, detail="User has no email address on record")
+
+    # 2. Build HTML body from the plain message
+    html_body = f"""
+    <div style="font-family:Arial,sans-serif;max-width:600px;padding:20px;border:1px solid #e0e0e0;border-radius:8px">
+        <h2 style="color:#4A90D9">{body.subject}</h2>
+        <p>Hi <strong>{user_name}</strong>,</p>
+        <p>{body.message}</p>
+        <p style="color:#888;font-size:12px">— Task Manager System</p>
+    </div>
+    """
+
+    # 3. Save to DB with status PENDING
+    doc = {
+        "task_id": None,
+        "user_id": user_id,
+        "recipient_email": recipient_email,
+        "notification_type": "direct_message",
+        "status": NotificationStatus.PENDING,
+        "subject": body.subject,
+        "body": html_body,
+        "retry_count": 0,
+        "error_message": None,
+        "created_at": datetime.utcnow(),
+        "sent_at": None,
+    }
+
+    result = await notifications_collection.insert_one(doc)
+    notification_id = str(result.inserted_id)
+
+    # 4. Enqueue for async sending
+    await notification_queue.put(notification_id)
+
+    return {
+        "message": "Notification queued successfully",
+        "notification_id": notification_id,
+        "status": NotificationStatus.PENDING,
+        "recipient_email": recipient_email
+    }
