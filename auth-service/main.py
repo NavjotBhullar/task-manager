@@ -61,27 +61,28 @@ async def signup(user:User):
         }
 
 
-
 @app.post("/auth/login")
-async def sign_in(user:User):
+async def sign_in(user: User):
+
     user = await collection.find_one({
-        "email":user.email
+        "email": user.email
     })
-    
+
     if not user:
-        return {"message":"User not found"}
-    
+        return {"message": "User not found"}
+
     if not verify_password(user.password, user["password"]):
         raise HTTPException(status_code=401, detail="Invalid password")
-    
+
     user["_id"] = str(user["_id"])
 
     token = create_access_token({
-            "user_id":user["_id"],
-            "email":user["email"]
-        })
+        "user_id": user["_id"],
+        "email":user["email"]
+    })
+
     return {
-        "user": {                         
+        "user": {
             "id": user["_id"],
             "email": user["email"]
         },
