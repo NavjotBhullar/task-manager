@@ -23,4 +23,4 @@ async def root():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy","service":"notification-service", "port": 8005}
+    return {"status": "healthy","service":"notification-service", "port": 3004}
