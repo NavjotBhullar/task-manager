@@ -1,5 +1,5 @@
 import os
-import jwt
+from jose import jwt
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
@@ -22,7 +22,6 @@ def verify_token(token: str):
     
 
 #Email Templates
-
 def build_email_content(notification_type: NotificationType, task_id: str) -> str:
     if notification_type == NotificationType.TASK_ASSIGNED:
         return f"You have been assigned a new task (ID: {task_id}). Please check your task list for details."
