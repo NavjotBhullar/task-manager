@@ -1,22 +1,35 @@
-## Task Manager API
+## Project Architecture
 
+The project follows a layered backend architecture to maintain separation of concerns and scalability.
 
-Create a .env file in the root of the project and add the following variables:
+### Folder Structure
 
-MONGO_URL=''
-DB_NAME=''
-AUTH_API=''
-USER_API=''
+controllers/
+Contains the business logic of the application such as creating, updating, and deleting tasks.
 
-Run the Project
+routes/
+Defines the API endpoints and maps requests to controller functions.
 
-Start the FastAPI server:
+models/
+Defines database schemas and handles interaction with MongoDB.
 
-uvicorn main:app --reload --port 3001
+middleware/
+Contains reusable request middleware such as authentication and error handling.
 
-## API Documentation
+db/
+Handles database connection and configuration.
 
-After running the server open:
+app.js
+Main application entry point responsible for initializing the server and registering routes and middleware.
 
-http://127.0.0.1:3001/docs
+### Request Flow
 
+Client Request
+     ↓
+Route Handler
+     ↓
+Controller Logic
+     ↓
+Database Operation
+     ↓
+Response Sent to Client
