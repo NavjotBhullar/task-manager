@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from bson import ObjectId
 import httpx
-from app.crud import task_serializer
 
 from app.schemas import TaskCreate, TaskUpdate
 from app.dependencies import get_db, get_current_user
 from app.crud import create_task, get_task, update_task, delete_task
+from app.crud import task_serializer
 from app.config import NOTIFICATION_URL, USER_SERVICE_URL
 
 
@@ -120,9 +119,7 @@ async def update_task_endpoint(
     if not updated:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    updated["id"] = str(updated["_id"])
-
-    return updated
+    return task_serializer(updated)
 
 
 # -----------------------------
