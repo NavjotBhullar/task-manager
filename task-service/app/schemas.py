@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
-from .models import TaskPriority, TaskStatus
+from app.models import TaskPriority, TaskStatus
 
 
 class TaskCreate(BaseModel):
