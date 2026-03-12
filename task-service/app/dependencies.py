@@ -1,32 +1,42 @@
-from fastapi import Header, HTTPException, Depends
 from motor.motor_asyncio import AsyncIOMotorClient
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import httpx
+import os
 
-from .config import MONGO_URI, AUTH_SERVICE_URL
+security = HTTPBearer()
 
-client = AsyncIOMotorClient(MONGO_URI)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://127.0.0.1:8001")
 
-db = client.tasks_db
+mongo_client = AsyncIOMotorClient(MONGO_URI)
+db = mongo_client.tasks_db
 
 
 async def get_db():
-
     return db
 
 
-async def get_current_user(authorization: str = Header(...)):
-
-    token = authorization.replace("Bearer ", "")
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token = credentials.credentials
 
     async with httpx.AsyncClient() as client:
-
         resp = await client.get(
             f"{AUTH_SERVICE_URL}/auth/validate",
             headers={"Authorization": f"Bearer {token}"}
         )
 
     if resp.status_code != 200:
-
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    return resp.json()["user"]
+    data = resp.json()
+
+    if not data.get("valid"):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    return {
+        "id": data["user_id"],
+        "email": data["email"]
+    }

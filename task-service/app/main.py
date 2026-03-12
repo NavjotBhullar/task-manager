@@ -1,10 +1,13 @@
 from fastapi import FastAPI
+from app.routers import tasks
 
 app = FastAPI(
     title="Task Service",
     version="1.0"
 )
 
+app.include_router(tasks.router)
+
 @app.get("/")
-async def health():
-    return {"service": "task-service running"}
+def health():
+    return {"service": "Task Service running"}
