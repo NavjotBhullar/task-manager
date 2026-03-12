@@ -1,7 +1,13 @@
 from datetime import datetime
 from bson import ObjectId
+from bson.errors import InvalidId
 
 
+
+
+# -----------------------------
+# Create Task
+# -----------------------------
 async def create_task(db, task_data, user_id):
 
     task = {
@@ -11,7 +17,7 @@ async def create_task(db, task_data, user_id):
 
         "status": "pending",
 
-        "priority": task_data.priority.value,
+        "priority": task_data.priority.value if hasattr(task_data.priority, "value") else task_data.priority,
 
         "assigned_to": None,
 
@@ -33,25 +39,85 @@ async def create_task(db, task_data, user_id):
     return task
 
 
+def task_serializer(task) -> dict:
+    return {
+        "id": str(task["_id"]),
+        "title": task["title"],
+        "description": task["description"],
+        "status": task["status"],
+        "priority": task["priority"],
+        "assigned_to": str(task["assigned_to"]) if task.get("assigned_to") else None,
+        "created_by": str(task["created_by"]),
+        "created_at": task["created_at"],
+        "updated_at": task["updated_at"],
+        "due_date": task["due_date"],
+        "tags": task["tags"]
+    }
+
+# -----------------------------
+# Get Single Task
+# -----------------------------
 async def get_task(db, task_id):
 
-    return await db.tasks.find_one({"_id": ObjectId(task_id)})
+    try:
+        task = await db.tasks.find_one({"_id": ObjectId(task_id)})
+        return task
+    except InvalidId:
+        return None
 
 
-async def delete_task(db, task_id):
+# -----------------------------
+# Get All Tasks
+# -----------------------------
+async def get_tasks(db):
 
-    return await db.tasks.delete_one({"_id": ObjectId(task_id)})
+    tasks = []
+
+    cursor = db.tasks.find()
+
+    async for task in cursor:
+
+        task["_id"] = str(task["_id"])
+
+        tasks.append(task)
+
+    return tasks
 
 
+# -----------------------------
+# Update Task
+# -----------------------------
 async def update_task(db, task_id, updates):
 
-    updates["updated_at"] = datetime.utcnow()
+    try:
 
-    await db.tasks.update_one(
+        updates["updated_at"] = datetime.utcnow()
 
-        {"_id": ObjectId(task_id)},
-        {"$set": updates}
+        await db.tasks.update_one(
+            {"_id": ObjectId(task_id)},
+            {"$set": updates}
+        )
 
-    )
+        task = await db.tasks.find_one({"_id": ObjectId(task_id)})
 
-    return await db.tasks.find_one({"_id": ObjectId(task_id)})
+        return task
+
+    except InvalidId:
+        return None
+
+
+# -----------------------------
+# Delete Task
+# -----------------------------
+async def delete_task(db, task_id):
+
+    try:
+
+        result = await db.tasks.delete_one(
+            {"_id": ObjectId(task_id)}
+        )
+
+        return result
+
+    except InvalidId:
+        return None
