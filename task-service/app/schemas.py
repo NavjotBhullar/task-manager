@@ -23,9 +23,9 @@ class TaskUpdate(BaseModel):
 
     description: Optional[str] = None
 
-    status: Optional[str] = None
+    status: Optional[TaskStatus] = None
 
-    priority: Optional[str] = None
+    priority: Optional[TaskPriority] = None
 
     due_date: Optional[datetime] = None
 
@@ -53,6 +53,8 @@ class TaskResponse(BaseModel):
     updated_at: datetime
 
     due_date: Optional[datetime]
+
+    completed_at: Optional[datetime]  # ← added field
 
     tags: List[str]
 
