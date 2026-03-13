@@ -40,4 +40,5 @@ JWT_SECRET = os.getenv("JWT_SECRET", "secret")
 # -----------------------------
 # Service Port
 # -----------------------------
+
 SERVICE_PORT = int(os.getenv("SERVICE_PORT", 8003))
