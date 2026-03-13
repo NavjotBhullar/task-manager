@@ -7,8 +7,7 @@ load_dotenv()
 # MongoDB
 # -----------------------------
 MONGO_URI = os.getenv(
-    "MONGO_URI",
-    "mongodb+srv://mohindersingh_db_user:mohinder123@cluster0.abwqeos.mongodb.net/?appName=Cluster0"
+    "MONGO_URI"
 )
 
 DB_NAME = os.getenv("DB_NAME", "task-manager")
