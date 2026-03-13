@@ -24,9 +24,9 @@ async def get_user(user_id: str):
         if "profile" not in user:
             user["profile"] = {
                 "name": user.get("name"),
-                "avatar": None,
-                "bio": None,
-                "department": None
+                "avatar": user.get("avatar", None),
+                "bio": user.get("bio", None),
+                "department": user.get("department", None)
             }
 
         user.pop("name", None)
@@ -58,9 +58,9 @@ async def get_all_users():
         if "profile" not in user:
             user["profile"] = {
                 "name": user.get("name"),
-                "avatar": None,
-                "bio": None,
-                "department": None
+                "avatar": user.get("avatar", None),
+                "bio": user.get("bio", None),
+                "department": user.get("department", None)
             }
 
         users.append(user)
