@@ -15,7 +15,7 @@ security = HTTPBearer()
 # -----------------------------
 mongo_client = AsyncIOMotorClient(MONGO_URI)
 
-db = mongo_client["task-manager"]
+db = mongo_client[DB_NAME]
 
 
 async def get_db():

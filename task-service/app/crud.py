@@ -3,8 +3,6 @@ from bson import ObjectId
 from bson.errors import InvalidId
 
 
-
-
 # -----------------------------
 # Create Task
 # -----------------------------
@@ -29,6 +27,9 @@ async def create_task(db, task_data, user_id):
 
         "due_date": task_data.due_date,
 
+        # new field
+        "completed_at": None,
+
         "tags": task_data.tags
     }
 
@@ -39,6 +40,9 @@ async def create_task(db, task_data, user_id):
     return task
 
 
+# -----------------------------
+# Serializer
+# -----------------------------
 def task_serializer(task) -> dict:
     return {
         "id": str(task["_id"]),
@@ -51,8 +55,13 @@ def task_serializer(task) -> dict:
         "created_at": task["created_at"],
         "updated_at": task["updated_at"],
         "due_date": task["due_date"],
+
+        # added field
+        "completed_at": task.get("completed_at"),
+
         "tags": task["tags"]
     }
+
 
 # -----------------------------
 # Get Single Task
@@ -92,6 +101,10 @@ async def update_task(db, task_id, updates):
     try:
 
         updates["updated_at"] = datetime.utcnow()
+
+        # if status becomes completed → set completed_at
+        if updates.get("status") == "completed":
+            updates["completed_at"] = datetime.utcnow()
 
         await db.tasks.update_one(
             {"_id": ObjectId(task_id)},
