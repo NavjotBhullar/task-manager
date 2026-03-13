@@ -19,17 +19,17 @@ class TaskCreate(BaseModel):
 
 class TaskUpdate(BaseModel):
 
-    title: Optional[str]
+    title: Optional[str] = None
 
-    description: Optional[str]
+    description: Optional[str] = None
 
-    status: Optional[TaskStatus]
+    status: Optional[str] = None
 
-    priority: Optional[TaskPriority]
+    priority: Optional[str] = None
 
-    due_date: Optional[datetime]
+    due_date: Optional[datetime] = None
 
-    tags: Optional[List[str]]
+    tags: Optional[List[str]] = None
 
 
 class TaskResponse(BaseModel):
