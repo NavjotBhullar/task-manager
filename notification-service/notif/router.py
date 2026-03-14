@@ -10,7 +10,6 @@ from models import (
 )
 from utils import build_email_content, send_email
 
-
 from notif.dependencies import get_current_user
 from notif.queue import notification_queue
 
@@ -21,8 +20,25 @@ def serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     return doc
 
+
+def resolve_user_name(db_user: dict) -> str:
+    """
+    Handles both storage shapes:
+    - top-level 'name' (set on signup via auth-service)
+    - nested 'profile.name' (set after update via user-service)
+    """
+    return (
+        db_user.get("name")
+        or db_user.get("profile", {}).get("name")
+        or db_user.get("username")
+        or "User"
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Webhook: POST /notify/task-created
+# Called by task-service automatically on task creation — no auth required
+# payload: { "task_id": "...", "assigned_to": "<user_id>", "title": "..." }
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/task-created", status_code=status.HTTP_202_ACCEPTED)
 async def task_created_webhook(payload: TaskCreatedWebhook):
@@ -31,26 +47,20 @@ async def task_created_webhook(payload: TaskCreatedWebhook):
     user_name = "User"
     recipient_email = None
 
-    # Fetch user email from users collection
     try:
         db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
         if db_user:
             recipient_email = db_user.get("email")
-            user_name = db_user.get("name", db_user.get("username", "User"))
+            user_name = resolve_user_name(db_user)   # handles profile.name
     except Exception:
         pass
 
     if not recipient_email:
-        # Can't send email without an address — log and return gracefully
         print(f"⚠️  No email found for user_id={user_id}, skipping notification.")
         return {"message": "No email on record for user, notification skipped"}
 
-    # Build task dict for build_email_content
     task = {"_id": payload.task_id, "title": payload.title}
-
-    subject, html_body = build_email_content(
-        NotificationType.TASK_ASSIGNED, task, user_name
-    )
+    subject, html_body = build_email_content(NotificationType.TASK_ASSIGNED, task, user_name)
 
     doc = {
         "task_id": payload.task_id,
@@ -84,14 +94,12 @@ async def task_created_webhook(payload: TaskCreatedWebhook):
 @router.post("/task/{task_id}", status_code=status.HTTP_202_ACCEPTED)
 async def notify_task(task_id: str, request: NotifyTaskRequest, user=Depends(get_current_user)):
 
-    # 1. Fetch task
     try:
         task = await tasks_collection.find_one({"_id": ObjectId(task_id)})
     except Exception:
         task = None
     task = task or {"_id": task_id, "title": f"Task {task_id}", "due_date": "N/A"}
 
-    # 2. Resolve recipient
     recipient_email = request.recipient_email
     user_name = "User"
     user_id = request.recipient_user_id or user.get("user_id", "")
@@ -101,7 +109,7 @@ async def notify_task(task_id: str, request: NotifyTaskRequest, user=Depends(get
             db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
             if db_user:
                 recipient_email = db_user.get("email")
-                user_name = db_user.get("name", db_user.get("username", "User"))
+                user_name = resolve_user_name(db_user)   # handles profile.name
         except Exception:
             pass
 
@@ -111,7 +119,6 @@ async def notify_task(task_id: str, request: NotifyTaskRequest, user=Depends(get
             detail="Recipient email or user ID is required"
         )
 
-    # 3. Build content & store
     subject, html_body = build_email_content(request.notification_type, task, user_name)
 
     doc = {
@@ -218,7 +225,7 @@ async def bulk_notify(request: BulkNotifyRequest, user=Depends(get_current_user)
         task = task or {"_id": task_id, "title": f"Task {task_id}"}
 
         subject, html_body = build_email_content(
-            request.notification_type, task, db_user.get("name", "User")
+            request.notification_type, task, resolve_user_name(db_user)   # ✅ handles profile.name
         )
 
         doc = {
@@ -282,7 +289,7 @@ async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_cu
             raise HTTPException(status_code=404, detail="User not found")
 
         recipient_email = db_user.get("email")
-        user_name = db_user.get("name", db_user.get("username", "User"))
+        user_name = resolve_user_name(db_user)   # handles profile.name
 
         if not recipient_email:
             raise HTTPException(status_code=400, detail="User has no email address on record")
