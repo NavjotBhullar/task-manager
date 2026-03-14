@@ -3,47 +3,115 @@ from datetime import datetime
 from typing import Optional
 from bson import ObjectId
 
-from database import notifications_collection,tasks_collection,users_collection
-from models import NotifyTaskRequest, NotificationStatus, NotificationType, BulkNotifyRequest, NotifyUserRequest
-from utils import verify_token, build_email_content, send_email
+from database import notifications_collection, tasks_collection, users_collection
+from models import (
+    NotifyTaskRequest, NotificationStatus, NotificationType,
+    BulkNotifyRequest, NotifyUserRequest, TaskCreatedWebhook
+)
+from utils import build_email_content, send_email
+
+
 from notif.dependencies import get_current_user
 from notif.queue import notification_queue
 
 router = APIRouter(prefix="/notify", tags=["Notifications"])
 
-# Convert ObjectId to string for JSON serialization
-def serialize(doc: dict) -> dict: 
+
+def serialize(doc: dict) -> dict:
     doc["_id"] = str(doc["_id"])
     return doc
 
-@router.post("/task/{task_id}", status_code=status.HTTP_202_ACCEPTED)
-async def notify_task(task_id: str, request: NotifyTaskRequest, user = Depends(get_current_user)):
+# ─────────────────────────────────────────────────────────────────────────────
+# Webhook: POST /notify/task-created
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/task-created", status_code=status.HTTP_202_ACCEPTED)
+async def task_created_webhook(payload: TaskCreatedWebhook):
 
-    # 1. Fetch task details for email content
+    user_id = payload.assigned_to
+    user_name = "User"
+    recipient_email = None
+
+    # Fetch user email from users collection
+    try:
+        db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
+        if db_user:
+            recipient_email = db_user.get("email")
+            user_name = db_user.get("name", db_user.get("username", "User"))
+    except Exception:
+        pass
+
+    if not recipient_email:
+        # Can't send email without an address — log and return gracefully
+        print(f"⚠️  No email found for user_id={user_id}, skipping notification.")
+        return {"message": "No email on record for user, notification skipped"}
+
+    # Build task dict for build_email_content
+    task = {"_id": payload.task_id, "title": payload.title}
+
+    subject, html_body = build_email_content(
+        NotificationType.TASK_ASSIGNED, task, user_name
+    )
+
+    doc = {
+        "task_id": payload.task_id,
+        "user_id": user_id,
+        "recipient_email": recipient_email,
+        "notification_type": NotificationType.TASK_ASSIGNED,
+        "status": NotificationStatus.PENDING,
+        "subject": subject,
+        "body": html_body,
+        "retry_count": 0,
+        "error_message": None,
+        "created_at": datetime.utcnow(),
+        "sent_at": None
+    }
+
+    result = await notifications_collection.insert_one(doc)
+    notification_id = str(result.inserted_id)
+    await notification_queue.put(notification_id)
+
+    return {
+        "message": "Notification queued successfully",
+        "notification_id": notification_id,
+        "status": NotificationStatus.QUEUED,
+        "recipient_email": recipient_email
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manual trigger: POST /notify/task/{task_id}
+# ─────────────────────────────────────────────────────────────────────────────
+@router.post("/task/{task_id}", status_code=status.HTTP_202_ACCEPTED)
+async def notify_task(task_id: str, request: NotifyTaskRequest, user=Depends(get_current_user)):
+
+    # 1. Fetch task
     try:
         task = await tasks_collection.find_one({"_id": ObjectId(task_id)})
     except Exception:
         task = None
-    task = task or {"_id": task_id, "title": f"Task {task_id}","due_date": "N/A" }
+    task = task or {"_id": task_id, "title": f"Task {task_id}", "due_date": "N/A"}
 
-    # 2. Determine recipient email
+    # 2. Resolve recipient
     recipient_email = request.recipient_email
     user_name = "User"
-    user_id = request.recipient_user_id or user.get("user_id","")
+    user_id = request.recipient_user_id or user.get("user_id", "")
 
     if not recipient_email:
         try:
             db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
-            if  db_user:
+            if db_user:
                 recipient_email = db_user.get("email")
-                user_name = db_user.get("name",db_user.get("username","User"))
+                user_name = db_user.get("name", db_user.get("username", "User"))
         except Exception:
             pass
 
-    if  not recipient_email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Recipient email or user ID is required")
-    
-    # 3. Build notification content + store
+    if not recipient_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recipient email or user ID is required"
+        )
+
+    # 3. Build content & store
     subject, html_body = build_email_content(request.notification_type, task, user_name)
 
     doc = {
@@ -62,8 +130,6 @@ async def notify_task(task_id: str, request: NotifyTaskRequest, user = Depends(g
 
     result = await notifications_collection.insert_one(doc)
     notification_id = str(result.inserted_id)
-
-    # 4. Enqueue notification for async sending
     await notification_queue.put(notification_id)
 
     return {
@@ -73,13 +139,17 @@ async def notify_task(task_id: str, request: NotifyTaskRequest, user = Depends(g
         "recipient_email": recipient_email
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /notify/status — list all notifications
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("/status")
 async def get_all_notifications(
     status: Optional[NotificationStatus] = None,
     notification_type: Optional[NotificationType] = None,
     limit: int = 20,
     skip: int = 0,
-    user = Depends(get_current_user)
+    user=Depends(get_current_user)
 ):
     query = {}
     if status:
@@ -96,31 +166,43 @@ async def get_all_notifications(
         "notifications": [serialize(doc) for doc in docs]
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /notify/status/{notification_id}
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("/status/{notification_id}")
-async def get_notification_status(notification_id: str, user = Depends(get_current_user)):
+async def get_notification_status(notification_id: str, user=Depends(get_current_user)):
     try:
         doc = await notifications_collection.find_one({"_id": ObjectId(notification_id)})
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid notification ID")
-    
+
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
-    
+
     return serialize(doc)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /notify/task/{task_id}/history
+# ─────────────────────────────────────────────────────────────────────────────
 @router.get("/task/{task_id}/history")
-async def task_notification_history(task_id: str, user = Depends(get_current_user)):
+async def task_notification_history(task_id: str, user=Depends(get_current_user)):
     docs = await notifications_collection.find({"task_id": task_id}).sort("created_at", -1).to_list(length=50)
     return {
         "total": len(docs),
         "notifications": [serialize(d) for d in docs]
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /notify/bulk
+# ─────────────────────────────────────────────────────────────────────────────
 @router.post("/bulk")
-async def bulk_notify(request: BulkNotifyRequest, user = Depends(get_current_user)):
+async def bulk_notify(request: BulkNotifyRequest, user=Depends(get_current_user)):
     queued_ids = []
 
-    for task_id,user_id in zip(request.task_ids,request.recipient_user_ids):
+    for task_id, user_id in zip(request.task_ids, request.recipient_user_ids):
         try:
             db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
         except Exception:
@@ -133,9 +215,11 @@ async def bulk_notify(request: BulkNotifyRequest, user = Depends(get_current_use
             task = await tasks_collection.find_one({"_id": ObjectId(task_id)})
         except Exception:
             task = None
-        task = task or {"_id": task_id, "title": f"Task {task_id}" }
+        task = task or {"_id": task_id, "title": f"Task {task_id}"}
 
-        subject, html_body = build_email_content(request.notification_type, task_id, db_user.get("name","User"))
+        subject, html_body = build_email_content(
+            request.notification_type, task, db_user.get("name", "User")
+        )
 
         doc = {
             "task_id": task_id,
@@ -162,28 +246,33 @@ async def bulk_notify(request: BulkNotifyRequest, user = Depends(get_current_use
         "notification_ids": queued_ids
     }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DELETE /notify/{notification_id}
+# ─────────────────────────────────────────────────────────────────────────────
 @router.delete("/{notification_id}")
-async def delete_notification(notification_id: str, user = Depends(get_current_user)):
+async def delete_notification(notification_id: str, user=Depends(get_current_user)):
     try:
         result = await notifications_collection.delete_one({"_id": ObjectId(notification_id)})
     except Exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid notification ID")
-    
+
     if result.deleted_count == 0:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
-    
+
     return {"message": "Notification deleted successfully"}
 
-# POST /notify/user/{user_id} — send a custom notification directly to a user
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /notify/user/{user_id} — custom direct message to a user
+# ─────────────────────────────────────────────────────────────────────────────
 @router.post("/user/{user_id}")
 async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_current_user)):
 
-    # 1. Resolve recipient email
     recipient_email = body.recipient_email
     user_name = "User"
 
     if not recipient_email:
-        # fetch email from users collection if not provided in body
         try:
             db_user = await users_collection.find_one({"_id": ObjectId(user_id)})
         except Exception:
@@ -198,7 +287,6 @@ async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_cu
         if not recipient_email:
             raise HTTPException(status_code=400, detail="User has no email address on record")
 
-    # 2. Build HTML body from the plain message
     html_body = f"""
     <div style="font-family:Arial,sans-serif;max-width:600px;padding:20px;border:1px solid #e0e0e0;border-radius:8px">
         <h2 style="color:#4A90D9">{body.subject}</h2>
@@ -208,7 +296,6 @@ async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_cu
     </div>
     """
 
-    # 3. Save to DB with status PENDING
     doc = {
         "task_id": None,
         "user_id": user_id,
@@ -220,13 +307,11 @@ async def notify_user(user_id: str, body: NotifyUserRequest, user=Depends(get_cu
         "retry_count": 0,
         "error_message": None,
         "created_at": datetime.utcnow(),
-        "sent_at": None,
+        "sent_at": None
     }
 
     result = await notifications_collection.insert_one(doc)
     notification_id = str(result.inserted_id)
-
-    # 4. Enqueue for async sending
     await notification_queue.put(notification_id)
 
     return {

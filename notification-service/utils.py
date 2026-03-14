@@ -1,8 +1,9 @@
 import os
-import jwt
+from jose import jwt
 from dotenv import load_dotenv
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+
 from models import NotificationType
 
 load_dotenv()
@@ -24,11 +25,11 @@ def verify_token(token: str):
 
 # ── Email Templates ──────────────────────────────────────────────
 def build_email_content(notification_type: NotificationType, task: dict, user_name: str):
-    title   = task.get("title", f"Task {task.get('_id', '')}")  # ✅ extract title from task dict
+    title   = task.get("title", f"Task {task.get('_id', '')}")
     task_id = str(task.get("_id", ""))
 
     if notification_type == NotificationType.TASK_ASSIGNED:
-        subject = f"📋 New Task Assigned: {title}"              # ✅ title now in subject
+        subject = f"📋 New Task Assigned: {title}"
         body    = f"Hi {user_name}, you have been assigned a new task: {title} (ID: {task_id})."
     elif notification_type == NotificationType.TASK_COMPLETED:
         subject = f"✅ Task Completed: {title}"
@@ -50,7 +51,7 @@ def build_email_content(notification_type: NotificationType, task: dict, user_na
 
 
 # ── Email Sending ────────────────────────────────────────────────
-async def send_email(to_email: str, subject: str, content: str):  # ✅ async
+async def send_email(to_email: str, subject: str, content: str):
     if not SENDGRID_API_KEY:
         print(f"[DEV MODE] Email → {to_email} | Subject: {subject}")
         return True, ""
