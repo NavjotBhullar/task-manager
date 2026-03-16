@@ -49,7 +49,14 @@ notification-service/
 | GET | `/notify/status` | ✅ Yes | List all notifications (filterable by status/type) |
 | GET | `/notify/status/{notification_id}` | ✅ Yes | Get status of a specific notification |
 | GET | `/notify/task/{task_id}/history` | ✅ Yes | Get notification history for a task |
-| DELETE | `/{notification_id}` | ✅ Yes | Delete a notification record |
+| POST | `/notify/task-updated/{task_id}` | ❌ No | Webhook called by task-service on task update |
+| POST | `/notify/overdue` | ✅ Yes | Scan and notify all overdue tasks |
+| POST | `/notify/retry/{notification_id}` | ✅ Yes | Retry a failed notification |
+| PATCH | `/notify/{notification_id}/read` | ✅ Yes | Mark a notification as read |
+| GET | `/notify/stats` | ✅ Yes | Aggregated counts by status and type |
+| GET | `/notify/user/{user_id}/feed` | ✅ Yes | All notifications for a specific user |
+| DELETE | `/notify/clear` | ✅ Admin | Wipe all notification records |
+| DELETE | `/{notification_id}` | ✅ Yes | Delete a specific notification record |
 | GET | `/health` | ❌ No | Health check |
 
 ---
