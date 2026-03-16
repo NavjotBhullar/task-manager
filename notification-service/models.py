@@ -18,11 +18,17 @@ class NotificationStatus(str, Enum):
     FAILED = "failed"
 
 
-# ── Webhook from task-service (POST /notify/task-created) ──────────
+# ── Webhook from task-service ──────────
 class TaskCreatedWebhook(BaseModel):
     task_id: str
     assigned_to: str   # user_id of the assignee
     title: str
+
+class TaskUpdatedWebhook(BaseModel):
+    task_id: str
+    assigned_to: str        
+    title: str
+    status: Optional[str] = None  
 
 
 # ── Manual trigger endpoints ───────────────────────────────────────
