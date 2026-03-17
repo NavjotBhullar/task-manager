@@ -12,6 +12,7 @@ class AnalyticsService:
 
         user_object_id = ObjectId(user_id)
 
+
         total_tasks = await task_collection.count_documents({
             "created_by": user_object_id
         }) 
@@ -38,7 +39,7 @@ class AnalyticsService:
             "status": "cancelled"
         })
 
-        completion_rate = completed_tasks / total_tasks * 100
+        completion_rate = completed_tasks / total_tasks * 100 if total_tasks > 0 else 0
 
         return {
             "created_by": user_id,
