@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Create Group</title>
+    <link rel="stylesheet" href="/static/groups.css" />
+  </head>
+  <body class="login-body">
+    <div class="login-card">
+      <h2>Create Group</h2>
+
+      <div id="messageBox" class="message-box"></div>
+
+      <input id="groupName" placeholder="Group name" />
+      <input id="members" placeholder="Members (comma separated)" />
+
+      <button onclick="createGroup()">Create</button>
+
+      <button onclick="goBack()" class="secondary">Back</button>
+    </div>
+
+    <script>
+      async function createGroup() {
+        const name = document.getElementById("groupName").value;
+        const members = document.getElementById("members").value.split(",");
+
+        const messageBox = document.getElementById("messageBox");
+
+        if (!name || members.length === 0) {
+          showMessage("Enter group name and members", "error");
+          return;
+        }
+
+        try {
+          const res = await fetch("/groups/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: name,
+              members: members,
+            }),
+          });
+
+          const data = await res.json();
+
+          showMessage("Group created successfully 🎉", "success");
+
+          document.getElementById("groupName").value = "";
+          document.getElementById("members").value = "";
+        } catch (err) {
+          showMessage("Error creating group ❌", "error");
+        }
+      }
+
+      function showMessage(msg, type) {
+        const box = document.getElementById("messageBox");
+
+        box.innerText = msg;
+        box.className = "message-box show " + type;
+
+        setTimeout(() => {
+          box.classList.remove("show");
+        }, 3000);
+      }
+
+      function goBack() {
+        window.location.href = "/chat";
+      }
+    </script>
+  </body>
+</html>
