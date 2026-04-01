@@ -3,15 +3,26 @@ import uvicorn
 from fastapi import FastAPI , HTTPException,Request
 from utils import create_access_token 
 from database import collection 
-from models import User,RefreshRequest
+from models import User,RefreshRequest,LoginRequest
 from utils import create_access_token, verify_token, hash_password, create_refresh_token , verify_password
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 
 # test branch
 app = FastAPI()
 
-PORT = int(os.getenv("PORT", 8000))
+load_dotenv()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # for dev (later restrict)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+PORT = int(os.getenv("PORT"))
 
 security = HTTPBearer()
 
@@ -62,7 +73,7 @@ async def signup(user:User):
 
 
 @app.post("/auth/login")
-async def sign_in(user: User):
+async def sign_in(user: LoginRequest):
 
     db_user = await collection.find_one({
         "email": user.email
@@ -88,7 +99,6 @@ async def sign_in(user: User):
         },
         "access_token": token
     }
-
 @app.get("/auth/validate")
 async def validate_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials  # automatically extracts token without "Bearer"

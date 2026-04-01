@@ -7,6 +7,10 @@ class User(BaseModel):
          min_length=6,
          max_length=72
     )
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str    
     
 class RefreshRequest(BaseModel):
     refresh_token: str
